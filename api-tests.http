@@ -1,0 +1,696 @@
+### 🚀 Complete Inventory Server API Testing Suite
+### Base URL: http://localhost:3000
+### Features: JWT Authentication, Password Encryption, Session Support, RBAC
+### Make sure the server is running before testing these endpoints
+
+##########################################
+### 1. 🌐 GENERAL ENDPOINTS
+##########################################
+
+### Get API Information
+GET http://localhost:3000/
+Content-Type: application/json
+
+### Health Check
+GET http://localhost:3000/health
+Content-Type: application/json
+
+##########################################
+### 2. 🔐 SESSION-BASED AUTHENTICATION (Legacy Support)
+##########################################
+
+### Login as Admin (Session-based)
+# @name loginAdminSession
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Get Profile using Session
+GET http://localhost:3000/auth/profile
+Content-Type: application/json
+
+### Get All Products using Session
+GET http://localhost:3000/products
+Content-Type: application/json
+
+### Logout Session
+POST http://localhost:3000/auth/logout
+Content-Type: application/json
+
+##########################################
+### 3. 🛡️ JWT AUTHENTICATION (Enhanced Security)
+##########################################
+
+### Login as Admin (JWT-based) - Store tokens
+# @name loginAdminJWT
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### IMPORTANT: Copy the accessToken from the response above and replace YOUR_ACCESS_TOKEN_HERE
+
+### Get Profile using JWT Token
+GET http://localhost:3000/auth/profile
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Get Token Information (JWT only)
+GET http://localhost:3000/auth/token-info
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Refresh JWT Tokens
+# @name refreshTokens
+POST http://localhost:3000/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "YOUR_REFRESH_TOKEN_HERE"
+}
+
+### Login as Viewer (JWT-based)
+# @name loginViewerJWT
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "viewer",
+  "password": "viewer123"
+}
+
+##########################################
+### 4. 🔒 PASSWORD MANAGEMENT & SECURITY
+##########################################
+
+### Login to get access token first
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Change Password (Requires Authentication)
+POST http://localhost:3000/auth/change-password
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "currentPassword": "admin123",
+  "newPassword": "NewSecurePassword123!"
+}
+
+### Login with New Password
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "NewSecurePassword123!"
+}
+
+### Change Password Back (for testing continuity)
+POST http://localhost:3000/auth/change-password
+Content-Type: application/json
+Authorization: Bearer YOUR_NEW_ACCESS_TOKEN_HERE
+
+{
+  "currentPassword": "NewSecurePassword123!",
+  "newPassword": "admin123"
+}
+
+##########################################
+### 5. 👑 ADMIN OPERATIONS (Full Access)
+##########################################
+
+### Login as Admin for all operations
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Get All Users (Admin Only)
+GET http://localhost:3000/auth/users
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Create New User (Admin Only) - Strong Password
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "username": "secureuser",
+  "password": "SecurePassword123!@#",
+  "role": "viewer"
+}
+
+### Get All Products
+GET http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Get Specific Product by ID
+GET http://localhost:3000/products/1
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Create New Product
+POST http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "name": "JWT Security Camera",
+  "description": "High-tech security camera with AI features",
+  "price": 299.99,
+  "quantity": 8
+}
+
+### Create Another Product for Testing
+POST http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "name": "Wireless Keyboard Pro",
+  "description": "Premium wireless mechanical keyboard",
+  "price": 149.99,
+  "quantity": 15
+}
+
+### Update Product (adjust ID as needed)
+PUT http://localhost:3000/products/9
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "name": "JWT Security Camera Pro",
+  "description": "Updated: Premium security camera with advanced AI features",
+  "price": 399.99,
+  "quantity": 12
+}
+
+### Delete Product (adjust ID as needed)
+DELETE http://localhost:3000/products/9
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+##########################################
+### 6. 👁️ VIEWER OPERATIONS (Read-Only Access)
+##########################################
+
+### Login as Viewer
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "viewer",
+  "password": "viewer123"
+}
+
+### Get All Products (should work for viewer)
+GET http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+### Get Specific Product (should work for viewer)
+GET http://localhost:3000/products/1
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+### Try to Create Product as Viewer (should fail with 403)
+POST http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+{
+  "name": "Unauthorized Product",
+  "description": "This should not be created",
+  "price": 99.99,
+  "quantity": 1
+}
+
+### Try to Update Product as Viewer (should fail with 403)
+PUT http://localhost:3000/products/1
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+{
+  "name": "Unauthorized Update",
+  "price": 1999.99
+}
+
+### Try to Delete Product as Viewer (should fail with 403)
+DELETE http://localhost:3000/products/1
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+### Try to Access Admin Endpoint as Viewer (should fail with 403)
+GET http://localhost:3000/auth/users
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+### Try to Create User as Viewer (should fail with 403)
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+{
+  "username": "unauthorized",
+  "password": "test123",
+  "role": "admin"
+}
+
+##########################################
+### 7. ❌ AUTHENTICATION & JWT ERROR TESTING
+##########################################
+
+### Try to Access Products Without Any Authentication (should fail with 401)
+GET http://localhost:3000/products
+Content-Type: application/json
+
+### Try Access with Invalid JWT Token (should fail with 401)
+GET http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer invalid.jwt.token.here
+
+### Try Access with Malformed Authorization Header
+GET http://localhost:3000/products
+Content-Type: application/json
+Authorization: InvalidFormat
+
+### Try Refresh with Invalid Token (should fail with 400)
+POST http://localhost:3000/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "invalid.refresh.token.here"
+}
+
+### Try Login with Wrong Password (should fail with 401)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "wrongpassword"
+}
+
+### Try Login with Non-existent User (should fail with 401)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "nonexistent",
+  "password": "anypassword"
+}
+
+### Try Login with Missing Fields (should fail with 400)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin"
+}
+
+##########################################
+### 8. ⚠️ VALIDATION & ERROR TESTING
+##########################################
+
+### Login as Admin for Validation Tests
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Create Product with Missing Required Fields (should fail with 400)
+POST http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "description": "Missing name and price"
+}
+
+### Create Product with Invalid Price (should fail with 400)
+POST http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "name": "Invalid Product",
+  "price": -50.00,
+  "quantity": 5
+}
+
+### Create Product with Invalid Quantity (should fail with 400)
+POST http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "name": "Invalid Product",
+  "price": 100.00,
+  "quantity": -5
+}
+
+### Try to Get Non-existent Product (should fail with 404)
+GET http://localhost:3000/products/9999
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Try to Update Non-existent Product (should fail with 404)
+PUT http://localhost:3000/products/9999
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "name": "Non-existent",
+  "price": 100.00
+}
+
+### Try to Delete Non-existent Product (should fail with 404)
+DELETE http://localhost:3000/products/9999
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Try to Register User with Invalid Role (should fail with 400)
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "username": "testuser2",
+  "password": "test123",
+  "role": "invalidrole"
+}
+
+### Try to Register User with Weak Password (should fail with 400)
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "username": "weakuser",
+  "password": "123",
+  "role": "viewer"
+}
+
+### Try to Register User with Short Username (should fail with 400)
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "username": "ab",
+  "password": "test123",
+  "role": "viewer"
+}
+
+##########################################
+### 9. 🔄 HYBRID AUTHENTICATION TESTING
+##########################################
+
+### Test Session-based Access (No Authorization Header)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### Access with Session Only (should work)
+GET http://localhost:3000/products
+Content-Type: application/json
+
+### Access Same Endpoint with JWT (should also work)
+GET http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Logout Session
+POST http://localhost:3000/auth/logout
+Content-Type: application/json
+
+### Try Session Access After Logout (should fail)
+GET http://localhost:3000/products
+Content-Type: application/json
+
+### But JWT Should Still Work
+GET http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+##########################################
+### 10. 🎯 COMPLETE WORKFLOW DEMONSTRATION
+##########################################
+
+### Complete Success Test Sequence with Enhanced Security
+
+### 1. 🔐 Login as Admin and get JWT tokens
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### 2. 👤 Get Profile with JWT
+GET http://localhost:3000/auth/profile
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### 3. 🔍 Get Token Information
+GET http://localhost:3000/auth/token-info
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### 4. 📦 Get All Products
+GET http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### 5. ➕ Create Test Product
+POST http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "name": "Comprehensive Test Product",
+  "description": "Product created via complete JWT workflow testing",
+  "price": 299.99,
+  "quantity": 15
+}
+
+### 6. ✏️ Update the Test Product (adjust ID based on creation response)
+PUT http://localhost:3000/products/11
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "name": "Updated Comprehensive Test Product",
+  "description": "Updated product via complete JWT workflow testing",
+  "price": 349.99,
+  "quantity": 20
+}
+
+### 7. 🔍 Get the Updated Product
+GET http://localhost:3000/products/11
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### 8. 🔒 Change Admin Password
+POST http://localhost:3000/auth/change-password
+Content-Type: application/json
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+{
+  "currentPassword": "admin123",
+  "newPassword": "TempSecurePassword123!"
+}
+
+### 9. 🔄 Login with New Password to get fresh tokens
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "TempSecurePassword123!"
+}
+
+### 10. 👥 Create New User with Strong Password
+POST http://localhost:3000/auth/register
+Content-Type: application/json
+Authorization: Bearer YOUR_NEW_ACCESS_TOKEN_HERE
+
+{
+  "username": "workflowuser",
+  "password": "WorkflowTestPassword123!@#",
+  "role": "viewer"
+}
+
+### 11. 👁️ Login as New Viewer
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "workflowuser",
+  "password": "WorkflowTestPassword123!@#"
+}
+
+### 12. 📖 View Products as New User (should work)
+GET http://localhost:3000/products
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+### 13. ❌ Try to Delete as Viewer (should fail)
+DELETE http://localhost:3000/products/11
+Content-Type: application/json
+Authorization: Bearer YOUR_VIEWER_ACCESS_TOKEN_HERE
+
+### 14. 🔄 Refresh JWT Tokens
+POST http://localhost:3000/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "YOUR_ADMIN_REFRESH_TOKEN_HERE"
+}
+
+### 15. 🧹 Cleanup - Login back as admin with new password
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "TempSecurePassword123!"
+}
+
+### 16. 🗑️ Delete Test Product
+DELETE http://localhost:3000/products/11
+Content-Type: application/json
+Authorization: Bearer YOUR_FINAL_ACCESS_TOKEN_HERE
+
+### 17. 🔒 Reset Admin Password
+POST http://localhost:3000/auth/change-password
+Content-Type: application/json
+Authorization: Bearer YOUR_FINAL_ACCESS_TOKEN_HERE
+
+{
+  "currentPassword": "TempSecurePassword123!",
+  "newPassword": "admin123"
+}
+
+### 18. 🚪 Final Logout
+POST http://localhost:3000/auth/logout
+Content-Type: application/json
+
+##########################################
+### 📚 COMPREHENSIVE TESTING GUIDE & NOTES
+##########################################
+
+### 🚀 SETUP INSTRUCTIONS:
+### 1. Make sure the server is running: npm start
+### 2. Server should be available at: http://localhost:3000
+### 3. Database should be initialized: npm run init-db
+### 4. Passwords should be migrated: npm run migrate-passwords
+
+### 🔑 AUTHENTICATION METHODS:
+### • JWT Authentication (Recommended):
+###   - Use Authorization: Bearer <access-token>
+###   - Access tokens expire in 15 minutes
+###   - Refresh tokens expire in 7 days
+###   - Use /auth/refresh to get new tokens
+### 
+### • Session Authentication (Legacy):
+###   - Automatic cookie-based sessions
+###   - No Authorization header needed
+###   - Works alongside JWT
+
+### 👥 DEFAULT USERS:
+### • admin / admin123 (Full Access):
+###   - Create, read, update, delete products
+###   - Manage users
+###   - Change passwords
+###   - Access all admin endpoints
+### 
+### • viewer / viewer123 (Read-Only):
+###   - View products only
+###   - Cannot create, update, or delete
+###   - Cannot access admin functions
+
+### 🔧 USAGE INSTRUCTIONS:
+### 1. Replace YOUR_ACCESS_TOKEN_HERE with actual access token from login
+### 2. Replace YOUR_REFRESH_TOKEN_HERE with actual refresh token
+### 3. Adjust product IDs based on your database (usually 1-8 exist by default)
+### 4. Copy tokens from login responses
+### 5. Some requests depend on previous ones - run in sequence for workflows
+
+### 📊 HTTP STATUS CODES:
+### • 200: Success (GET, PUT operations)
+### • 201: Created (POST operations)
+### • 400: Bad Request (validation errors, missing fields)
+### • 401: Unauthorized (authentication required/failed)
+###   - NO_AUTH: No authentication provided
+###   - TOKEN_EXPIRED: JWT access token expired
+###   - INVALID_TOKEN: Invalid JWT token
+### • 403: Forbidden (insufficient permissions)
+###   - INSUFFICIENT_PERMISSIONS: User role lacks access
+### • 404: Not Found (resource doesn't exist)
+### • 500: Internal Server Error
+
+### 🛡️ SECURITY FEATURES TESTED:
+### ✅ JWT Authentication with Bearer tokens
+### ✅ Password encryption with bcrypt
+### ✅ Password strength validation
+### ✅ Role-based access control (RBAC)
+### ✅ Token refresh mechanism
+### ✅ Input validation and sanitization
+### ✅ Secure error handling
+### ✅ Hybrid authentication support
+
+### 🎯 TEST CATEGORIES COVERED:
+### 1. 🌐 General server endpoints
+### 2. 🔐 Session-based authentication (legacy)
+### 3. 🛡️ JWT authentication (enhanced)
+### 4. 🔒 Password management & security
+### 5. 👑 Admin operations (full access)
+### 6. 👁️ Viewer operations (read-only)
+### 7. ❌ Authentication & JWT errors
+### 8. ⚠️ Validation & input errors
+### 9. 🔄 Hybrid authentication modes
+### 10. 🎯 Complete workflow demonstration
+
+### 🔍 DEBUGGING TIPS:
+### • Use /auth/token-info to inspect JWT tokens
+### • Check server console for detailed error logs
+### • Tokens expire - refresh when you get 401 TOKEN_EXPIRED
+### • Sessions work without Authorization header
+### • JWT requires Authorization: Bearer <token>
+
+### 🚀 PRODUCTION CONSIDERATIONS:
+### • Change JWT secrets in environment variables
+### • Use HTTPS for token transmission
+### • Store refresh tokens securely
+### • Implement rate limiting
+### • Monitor authentication attempts
+### • Use stronger password policies if needed
+
+##########################################
