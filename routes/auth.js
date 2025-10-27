@@ -49,9 +49,6 @@ router.post('/login',
         }
 
         if (!authResult.success) {
-            // SECURITY: Log failed attempt details for monitoring
-            console.log(`🚨 Failed login attempt: ${sanitizedUsername} from ${req.rateLimitInfo?.ipAddress || 'unknown'}`);
-            
             // Check if this failed attempt should trigger a lockout
             if (req.rateLimitInfo) {
                 const lockStatus = await rateLimitMiddleware.rateLimitService.isUsernameLocked(sanitizedUsername);
@@ -75,9 +72,6 @@ router.post('/login',
                 errorCode: authResult.errorCode || 'LOGIN_FAILED'
             });
         }
-
-        // SECURITY: Log successful login
-        console.log(`✅ Successful login: ${sanitizedUsername} from ${req.rateLimitInfo?.ipAddress || 'unknown'}`);
 
         // Store user session (for backward compatibility)
         req.session.user = authResult.user;

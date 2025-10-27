@@ -53,7 +53,7 @@ class AuthService {
             if (!this.passwordService.isPasswordHashed(user.password)) {
                 const hashedPassword = await this.passwordService.hashPassword(password);
                 await this.db.updateUserPassword(user.id, hashedPassword);
-                console.log(`🔐 Updated password hash for user: ${username}`);
+                // Password hash updated successfully
             }
 
             // Generate JWT tokens

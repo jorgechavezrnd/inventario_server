@@ -105,17 +105,7 @@ class RateLimitService {
 
             // If login failed, check if we need to lock the account
             if (!success) {
-                console.log(`🔄 Login failed, calling checkAndLockAccount for ${username}`);
-                const lockResult = await this.checkAndLockAccount(username);
-                console.log(`   Lock result: ${lockResult}`);
-            }
-
-            console.log(`📝 Login attempt recorded: ${username} from ${ipAddress} - ${success ? 'SUCCESS' : 'FAILED'}`);
-            
-            // Debug: Show current attempt count for this user
-            if (!success) {
-                const counts = await this.getAttemptCounts(username, ipAddress);
-                console.log(`   Current failed attempts for ${username}: ${counts.username.attempts}/${this.config.maxAttemptsPerUsername}`);
+                await this.checkAndLockAccount(username);
             }
         } catch (error) {
             console.error('Error recording login attempt:', error);
@@ -140,36 +130,7 @@ class RateLimitService {
                 AND success = 0
             `;
             
-            console.log(`   Count query parameters: username=${username}, windowStart=${windowStart.toISOString()}`);
-            console.log(`   Window start as datetime: ${windowStart.toISOString().replace('T', ' ').replace('Z', '')}`);
-            
-            // Also let's see what's actually in the database for this username
-            const debugQuery = `
-                SELECT identifier, attempt_time, success, identifier_type
-                FROM login_attempts 
-                WHERE identifier = ? 
-                ORDER BY attempt_time DESC 
-                LIMIT 10
-            `;
-            
-            // Execute debug query first
-            await new Promise((resolve) => {
-                this.db.db.all(debugQuery, [username], (err, rows) => {
-                    if (err) {
-                        console.error('   Debug query error:', err);
-                    } else {
-                        console.log(`   Debug - All records for ${username}:`, rows);
-                        if (rows && rows.length > 0) {
-                            rows.forEach((row, i) => {
-                                console.log(`     ${i+1}. ${row.attempt_time} - success: ${row.success} - type: ${row.identifier_type}`);
-                            });
-                        } else {
-                            console.log(`   No records found for ${username}`);
-                        }
-                    }
-                    resolve();
-                });
-            });
+
             
             return new Promise((resolve) => {
                 this.db.db.get(countQuery, [username, windowStart.toISOString()], (err, row) => {
@@ -180,10 +141,6 @@ class RateLimitService {
                     }
                     
                     const failedAttempts = row?.failed_count || 0;
-                    
-                    console.log(`🔍 Checking lockout for ${username}: ${failedAttempts} failed attempts (limit: ${this.config.maxAttemptsPerUsername})`);
-                    console.log(`   Comparison: ${failedAttempts} >= ${this.config.maxAttemptsPerUsername} = ${failedAttempts >= this.config.maxAttemptsPerUsername}`);
-                    console.log(`   Config object:`, this.config);
                     
                     if (failedAttempts >= this.config.maxAttemptsPerUsername) {
                         // Lock the account
@@ -199,7 +156,6 @@ class RateLimitService {
                                 console.error('Error locking account:', lockErr);
                                 resolve(false);
                             } else {
-                                console.log(`🔒 Account locked: ${username} (${failedAttempts} failed attempts)`);
                                 resolve(true);
                             }
                         });
@@ -289,7 +245,6 @@ class RateLimitService {
                         console.error('Error unlocking account:', err);
                         resolve(false);
                     } else {
-                        console.log(`🔓 Account unlocked: ${username} by ${adminUser}`);
                         resolve(true);
                     }
                 });
@@ -334,7 +289,7 @@ class RateLimitService {
             
             const [loginResult, lockoutResult] = await Promise.all([loginPromise, lockoutPromise]);
             
-            console.log(`🧹 Cleanup completed: ${loginResult.changes} login attempts, ${lockoutResult.changes} expired lockouts`);
+            // Cleanup completed successfully
         } catch (error) {
             console.error('Error cleaning up old records:', error);
         }
