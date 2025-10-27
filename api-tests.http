@@ -1,6 +1,6 @@
 ### 🚀 Complete Inventory Server API Testing Suite
 ### Base URL: http://localhost:3000
-### Features: JWT Authentication, Password Encryption, Session Support, RBAC
+### Features: JWT Authentication, Password Encryption, Session Support, RBAC, Rate Limiting, Security Monitoring
 ### Make sure the server is running before testing these endpoints
 
 ##########################################
@@ -665,6 +665,11 @@ Content-Type: application/json
 ### ✅ Input validation and sanitization
 ### ✅ Secure error handling
 ### ✅ Hybrid authentication support
+### ✅ Rate limiting and brute force protection
+### ✅ User enumeration prevention
+### ✅ Security logging and monitoring
+### ✅ Account lockout mechanisms
+### ✅ Administrative security controls
 
 ### 🎯 TEST CATEGORIES COVERED:
 ### 1. 🌐 General server endpoints
@@ -677,6 +682,8 @@ Content-Type: application/json
 ### 8. ⚠️ Validation & input errors
 ### 9. 🔄 Hybrid authentication modes
 ### 10. 🎯 Complete workflow demonstration
+### 11. 🛡️ Security monitoring & rate limiting
+### 12. 🚨 Brute force attack simulation
 
 ### 🔍 DEBUGGING TIPS:
 ### • Use /auth/token-info to inspect JWT tokens
@@ -689,8 +696,173 @@ Content-Type: application/json
 ### • Change JWT secrets in environment variables
 ### • Use HTTPS for token transmission
 ### • Store refresh tokens securely
-### • Implement rate limiting
-### • Monitor authentication attempts
+### • Rate limiting is now implemented and active
+### • Authentication attempts are monitored and logged
+### • Account lockout prevents brute force attacks
 ### • Use stronger password policies if needed
+### • Monitor security reports for threat analysis
+
+##########################################
+### 11. 🛡️ SECURITY MONITORING & RATE LIMITING
+##########################################
+
+### STEP 1: Login as Admin to get access token for security endpoints
+### This request creates a variable that can be used in subsequent requests
+# @name loginAdminSecurity
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### STEP 2: Use the security endpoints below (they automatically use the token from above)
+### NOTE: Alternatively, you can replace 'loginAdminSecurity' with 'loginAdminJWT' if you already executed that login
+
+### Get Security Statistics (Admin only)
+GET http://localhost:3000/auth/security/stats
+Content-Type: application/json
+Authorization: Bearer {{loginAdminSecurity.response.body.tokens.accessToken}}
+
+### Get Security Report (24 hours)
+GET http://localhost:3000/auth/security/report?hours=24
+Content-Type: application/json
+Authorization: Bearer {{loginAdminSecurity.response.body.tokens.accessToken}}
+
+### Get Security Report (1 hour)
+GET http://localhost:3000/auth/security/report?hours=1
+Content-Type: application/json
+Authorization: Bearer {{loginAdminSecurity.response.body.tokens.accessToken}}
+
+### Get Login Attempts for Specific User
+GET http://localhost:3000/auth/security/attempts/admin?limit=10
+Content-Type: application/json
+Authorization: Bearer {{loginAdminSecurity.response.body.tokens.accessToken}}
+
+### Get All Locked Accounts
+GET http://localhost:3000/auth/security/locked-accounts
+Content-Type: application/json
+Authorization: Bearer {{loginAdminSecurity.response.body.tokens.accessToken}}
+
+### Unlock a Locked Account (Admin only)
+POST http://localhost:3000/auth/security/unlock
+Content-Type: application/json
+Authorization: Bearer {{loginAdminSecurity.response.body.tokens.accessToken}}
+
+{
+  "username": "test_locked_user"
+}
+
+### Alternative: Get Security Stats using existing admin login (if you ran loginAdminJWT first)
+# GET http://localhost:3000/auth/security/stats
+# Content-Type: application/json  
+# Authorization: Bearer {{loginAdminJWT.response.body.tokens.accessToken}}
+
+##########################################
+### 12. 🚨 BRUTE FORCE ATTACK SIMULATION
+##########################################
+
+### Failed Login Attempt 1 (should succeed - no rate limiting yet)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "nonexistent",
+  "password": "wrongpassword"
+}
+
+### Failed Login Attempt 2
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "nonexistent",
+  "password": "wrongpassword"
+}
+
+### Failed Login Attempt 3
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "nonexistent",
+  "password": "wrongpassword"
+}
+
+### Failed Login Attempt 4
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "nonexistent",
+  "password": "wrongpassword"
+}
+
+### Failed Login Attempt 5
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "nonexistent",
+  "password": "wrongpassword"
+}
+
+### Failed Login Attempt 6 (should trigger account lockout - 423 Locked)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "nonexistent",
+  "password": "wrongpassword"
+}
+
+### Test Rate Limiting on IP (try multiple different usernames from same IP)
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "user1",
+  "password": "wrong"
+}
+
+###
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "user2",
+  "password": "wrong"
+}
+
+###
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "user3",
+  "password": "wrong"
+}
+
+### User Enumeration Test - Both should return same generic message
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "wrongpassword"
+}
+
+###
+POST http://localhost:3000/auth/login
+Content-Type: application/json
+
+{
+  "username": "definitelynonexistentuser",
+  "password": "wrongpassword"
+}
+
+### Verify Generic Error Messages (should both be identical)
+### Response should be: "Invalid username or password"
 
 ##########################################

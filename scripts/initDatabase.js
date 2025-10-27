@@ -1,11 +1,60 @@
 const DatabaseManager = require('../database/DatabaseManager');
+const PasswordService = require('../services/PasswordService');
 
-async function initializeDatabase() {
+async function initializeDatabase(cleanFirst = false) {
     console.log('Initializing database with sample data...');
+    
+    if (cleanFirst) {
+        console.log('🧹 Clean mode enabled - will clear existing data first');
+    }
     
     const db = new DatabaseManager();
     
     try {
+        // Clean existing data first (if requested)
+        if (cleanFirst) {
+            console.log('🧹 Cleaning existing data...');
+        
+        // Clear all tables
+        await new Promise((resolve, reject) => {
+            db.db.run('DELETE FROM login_attempts', (err) => {
+                if (err && !err.message.includes('no such table')) reject(err);
+                else resolve();
+            });
+        });
+        
+        await new Promise((resolve, reject) => {
+            db.db.run('DELETE FROM account_lockouts', (err) => {
+                if (err && !err.message.includes('no such table')) reject(err);
+                else resolve();
+            });
+        });
+        
+        await new Promise((resolve, reject) => {
+            db.db.run('DELETE FROM products', (err) => {
+                if (err && !err.message.includes('no such table')) reject(err);
+                else resolve();
+            });
+        });
+        
+        await new Promise((resolve, reject) => {
+            db.db.run('DELETE FROM users', (err) => {
+                if (err && !err.message.includes('no such table')) reject(err);
+                else resolve();
+            });
+        });
+        
+        // Reset auto-increment counters
+        await new Promise((resolve, reject) => {
+            db.db.run('DELETE FROM sqlite_sequence', (err) => {
+                if (err && !err.message.includes('no such table')) reject(err);
+                else resolve();
+            });
+        });
+        
+            console.log('✅ Existing data cleaned');
+        }
+        
         // Initialize tables first
         await db.initializeTables();
         
@@ -16,16 +65,23 @@ async function initializeDatabase() {
         const existingAdmin = await db.getUserByUsername('admin');
         const existingViewer = await db.getUserByUsername('viewer');
         
+        // Create password service instance
+        const passwordService = new PasswordService();
+        
         if (!existingAdmin) {
-            await db.createUser('admin', 'admin123', 'admin');
-            console.log('✅ Created admin user (username: admin, password: admin123)');
+            // Hash the password before storing
+            const hashedAdminPassword = await passwordService.hashPassword('admin123');
+            await db.createUser('admin', hashedAdminPassword, 'admin');
+            console.log('✅ Created admin user (username: admin, password: admin123) - Password encrypted');
         } else {
             console.log('ℹ️  Admin user already exists');
         }
         
         if (!existingViewer) {
-            await db.createUser('viewer', 'viewer123', 'viewer');
-            console.log('✅ Created viewer user (username: viewer, password: viewer123)');
+            // Hash the password before storing
+            const hashedViewerPassword = await passwordService.hashPassword('viewer123');
+            await db.createUser('viewer', hashedViewerPassword, 'viewer');
+            console.log('✅ Created viewer user (username: viewer, password: viewer123) - Password encrypted');
         } else {
             console.log('ℹ️  Viewer user already exists');
         }
@@ -126,7 +182,9 @@ async function initializeDatabase() {
 
 // Run the initialization if this script is called directly
 if (require.main === module) {
-    initializeDatabase().catch(console.error);
+    // Check if --clean parameter was passed
+    const shouldClean = process.argv.includes('--clean');
+    initializeDatabase(shouldClean).catch(console.error);
 }
 
 module.exports = initializeDatabase;

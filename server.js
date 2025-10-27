@@ -12,12 +12,14 @@ const { attachUserInfo, logRequest } = require('./middleware/auth');
 
 // Import database manager to initialize database
 const DatabaseManager = require('./database/DatabaseManager');
+const SecurityMaintenanceService = require('./services/SecurityMaintenanceService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Initialize database
+// Initialize database and security services
 const db = new DatabaseManager();
+let securityMaintenanceService;
 
 // Middleware setup
 app.use(cors({
@@ -117,6 +119,12 @@ app.use((error, req, res, next) => {
 process.on('SIGINT', () => {
     console.log('\nShutting down server gracefully...');
     
+    // Stop security maintenance service
+    if (securityMaintenanceService) {
+        securityMaintenanceService.stop();
+        console.log('Security maintenance service stopped');
+    }
+    
     // Close database connection
     if (db) {
         db.close();
@@ -153,6 +161,14 @@ app.listen(PORT, async () => {
         console.log('⚠️  Could not check database for users');
         console.log('💡 Run "npm run init-db" to initialize the database');
         console.log('='.repeat(50));
+    }
+    
+    // Initialize security maintenance service
+    try {
+        securityMaintenanceService = new SecurityMaintenanceService();
+        console.log('🛡️  Security maintenance service initialized');
+    } catch (error) {
+        console.error('❌ Failed to initialize security maintenance service:', error);
     }
 });
 

@@ -25,20 +25,35 @@ class AuthService {
         try {
             const user = await this.db.getUserByUsername(username);
             
+            // SECURITY: Always check password even if user doesn't exist
+            // This prevents user enumeration through timing attacks
             if (!user) {
-                return { success: false, message: 'User not found' };
+                // Perform dummy hash operation to maintain consistent timing
+                await this.passwordService.hashPassword('dummy_password_to_prevent_timing_attack');
+                
+                // SECURITY: Generic error message to prevent user enumeration
+                return { 
+                    success: false, 
+                    message: 'Invalid username or password',
+                    errorCode: 'INVALID_CREDENTIALS'
+                };
             }
 
             const isPasswordValid = await this.validatePassword(password, user.password);
             if (!isPasswordValid) {
-                return { success: false, message: 'Invalid password' };
+                // SECURITY: Same generic message for invalid password
+                return { 
+                    success: false, 
+                    message: 'Invalid username or password',
+                    errorCode: 'INVALID_CREDENTIALS'
+                };
             }
 
             // If user has plain text password, update it to hashed version
             if (!this.passwordService.isPasswordHashed(user.password)) {
                 const hashedPassword = await this.passwordService.hashPassword(password);
                 await this.db.updateUserPassword(user.id, hashedPassword);
-                console.log(`Updated password hash for user: ${username}`);
+                console.log(`🔐 Updated password hash for user: ${username}`);
             }
 
             // Generate JWT tokens
@@ -53,7 +68,13 @@ class AuthService {
             };
         } catch (error) {
             console.error('Authentication error:', error);
-            return { success: false, message: 'Authentication failed' };
+            
+            // SECURITY: Generic error message for system errors
+            return { 
+                success: false, 
+                message: 'Invalid username or password',
+                errorCode: 'AUTHENTICATION_ERROR'
+            };
         }
     }
 

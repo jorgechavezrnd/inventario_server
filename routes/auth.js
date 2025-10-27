@@ -2,36 +2,88 @@ const express = require('express');
 const router = express.Router();
 const AuthService = require('../services/AuthService');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const RateLimitMiddleware = require('../middleware/rateLimit');
 
 const authService = new AuthService();
+const rateLimitMiddleware = new RateLimitMiddleware();
 
-// POST /auth/login - User login
-router.post('/login', async (req, res) => {
+// POST /auth/login - User login with rate limiting and security logging
+router.post('/login', 
+    // SECURITY: Rate limiting middleware
+    rateLimitMiddleware.checkLoginRateLimit(),
+    async (req, res) => {
     try {
         const { username, password } = req.body;
 
-        // Validation
+        // SECURITY: Input validation
         if (!username || !password) {
             return res.status(400).json({
                 success: false,
-                message: 'Username and password are required'
+                message: 'Username and password are required',
+                errorCode: 'MISSING_CREDENTIALS'
             });
         }
+
+        // SECURITY: Get sanitized username from middleware (already processed)
+        const sanitizedUsername = req.rateLimitInfo?.username || username.toString().trim().toLowerCase();
+        
+        // SECURITY: Add security headers
+        res.set({
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'X-XSS-Protection': '1; mode=block'
+        });
 
         // Authenticate user
-        const authResult = await authService.authenticateUser(username, password);
+        const authResult = await authService.authenticateUser(sanitizedUsername, password);
+
+        // SECURITY: Record login attempt in database
+        if (req.rateLimitInfo) {
+            const { ipAddress, userAgent } = req.rateLimitInfo;
+            await rateLimitMiddleware.rateLimitService.recordLoginAttempt(
+                sanitizedUsername, 
+                ipAddress, 
+                userAgent, 
+                authResult.success
+            );
+        }
 
         if (!authResult.success) {
+            // SECURITY: Log failed attempt details for monitoring
+            console.log(`🚨 Failed login attempt: ${sanitizedUsername} from ${req.rateLimitInfo?.ipAddress || 'unknown'}`);
+            
+            // Check if this failed attempt should trigger a lockout
+            if (req.rateLimitInfo) {
+                const lockStatus = await rateLimitMiddleware.rateLimitService.isUsernameLocked(sanitizedUsername);
+                if (lockStatus.locked) {
+                    return res.status(423).json({
+                        success: false,
+                        message: 'Account temporarily locked due to multiple failed login attempts. Please try again later.',
+                        error: 'ACCOUNT_LOCKED',
+                        lockedUntil: lockStatus.lockedUntil,
+                        retryAfter: rateLimitMiddleware.calculateRetryAfter(lockStatus.lockedUntil)
+                    });
+                }
+                
+                // Add rate limiting headers for failed attempts
+                await rateLimitMiddleware.addRateLimitHeaders(req, res, sanitizedUsername, req.rateLimitInfo.ipAddress);
+            }
+            
             return res.status(401).json({
                 success: false,
-                message: authResult.message
+                message: authResult.message,
+                errorCode: authResult.errorCode || 'LOGIN_FAILED'
             });
         }
+
+        // SECURITY: Log successful login
+        console.log(`✅ Successful login: ${sanitizedUsername} from ${req.rateLimitInfo?.ipAddress || 'unknown'}`);
 
         // Store user session (for backward compatibility)
         req.session.user = authResult.user;
 
-        res.json({
+        // SECURITY: Remove sensitive data and add security info
+        const response = {
             success: true,
             message: 'Login successful',
             user: {
@@ -40,13 +92,35 @@ router.post('/login', async (req, res) => {
                 role: authResult.user.role
             },
             tokens: authResult.tokens,
-            authType: 'hybrid' // Supports both JWT and session
-        });
+            authType: 'hybrid', // Supports both JWT and session
+            loginTime: new Date().toISOString(),
+            sessionExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+        };
+
+        res.json(response);
     } catch (error) {
-        console.error('Login error:', error);
+        // SECURITY: Log system errors without exposing details
+        console.error('🚨 Login system error:', error);
+        
+        // SECURITY: Record failed attempt due to system error
+        if (req.rateLimitInfo) {
+            const { username, ipAddress, userAgent } = req.rateLimitInfo;
+            try {
+                await rateLimitMiddleware.rateLimitService.recordLoginAttempt(
+                    username, 
+                    ipAddress, 
+                    userAgent, 
+                    false
+                );
+            } catch (logError) {
+                console.error('Error logging failed attempt:', logError);
+            }
+        }
+        
         res.status(500).json({
             success: false,
-            message: 'Internal server error during login'
+            message: 'Authentication service temporarily unavailable. Please try again later.',
+            errorCode: 'SYSTEM_ERROR'
         });
     }
 });
@@ -298,6 +372,120 @@ router.get('/token-info', requireAuth, (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to retrieve token information'
+        });
+    }
+});
+
+// SECURITY MANAGEMENT ENDPOINTS (Admin only)
+
+// GET /auth/security/stats - Get security statistics
+router.get('/security/stats', requireAuth, requireRole(['admin']), rateLimitMiddleware.getRateLimitStats());
+
+// POST /auth/security/unlock - Unlock a locked account
+router.post('/security/unlock', requireAuth, requireRole(['admin']), rateLimitMiddleware.unlockAccount());
+
+// GET /auth/security/attempts/:username - Get login attempts for a specific user (admin only)
+router.get('/security/attempts/:username', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const { username } = req.params;
+        const { limit = 50 } = req.query;
+        
+        // Get recent login attempts for this user
+        const rateLimitService = rateLimitMiddleware.rateLimitService;
+        const attempts = await new Promise((resolve, reject) => {
+            const query = `
+                SELECT attempt_time, success, ip_address, user_agent
+                FROM login_attempts 
+                WHERE identifier = ? AND identifier_type = 'username'
+                ORDER BY attempt_time DESC 
+                LIMIT ?
+            `;
+            
+            rateLimitService.db.db.all(query, [username, parseInt(limit)], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+        
+        res.json({
+            success: true,
+            message: 'Login attempts retrieved successfully',
+            username: username,
+            attempts: attempts.map(attempt => ({
+                timestamp: attempt.attempt_time,
+                success: attempt.success === 1,
+                ipAddress: attempt.ip_address,
+                userAgent: attempt.user_agent
+            })),
+            totalAttempts: attempts.length
+        });
+    } catch (error) {
+        console.error('Error getting login attempts:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve login attempts'
+        });
+    }
+});
+
+// GET /auth/security/locked-accounts - Get all currently locked accounts
+router.get('/security/locked-accounts', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const rateLimitService = rateLimitMiddleware.rateLimitService;
+        const lockedAccounts = await new Promise((resolve, reject) => {
+            const query = `
+                SELECT username, locked_at, locked_until, failed_attempts, locked_by
+                FROM account_lockouts 
+                WHERE locked_until > datetime('now')
+                ORDER BY locked_at DESC
+            `;
+            
+            rateLimitService.db.db.all(query, [], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows || []);
+            });
+        });
+        
+        res.json({
+            success: true,
+            message: 'Locked accounts retrieved successfully',
+            lockedAccounts: lockedAccounts.map(account => ({
+                username: account.username,
+                lockedAt: account.locked_at,
+                lockedUntil: account.locked_until,
+                failedAttempts: account.failed_attempts,
+                lockedBy: account.locked_by
+            })),
+            totalLocked: lockedAccounts.length
+        });
+    } catch (error) {
+        console.error('Error getting locked accounts:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve locked accounts'
+        });
+    }
+});
+
+// GET /auth/security/report - Generate comprehensive security report
+router.get('/security/report', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const { hours = 24 } = req.query;
+        const SecurityMaintenanceService = require('../services/SecurityMaintenanceService');
+        const maintenanceService = new SecurityMaintenanceService();
+        
+        const report = await maintenanceService.getSecurityReport(parseInt(hours));
+        
+        res.json({
+            success: true,
+            message: 'Security report generated successfully',
+            report
+        });
+    } catch (error) {
+        console.error('Error generating security report:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to generate security report'
         });
     }
 });
