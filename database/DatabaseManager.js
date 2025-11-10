@@ -19,8 +19,9 @@ class DatabaseManager {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
                     password TEXT NOT NULL,
-                    role TEXT NOT NULL CHECK (role IN ('admin', 'viewer')),
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    role TEXT NOT NULL CHECK (role IN ('admin', 'viewer', 'admin_manage_users')),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             `;
 
@@ -37,6 +38,30 @@ class DatabaseManager {
                 )
             `;
 
+            // Create login_attempts table for rate limiting
+            const createLoginAttemptsTable = `
+                CREATE TABLE IF NOT EXISTS login_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    identifier TEXT,
+                    identifier_type TEXT,
+                    ip_address TEXT NOT NULL,
+                    user_agent TEXT,
+                    attempt_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    success INTEGER NOT NULL DEFAULT 0
+                )
+            `;
+
+            // Create account_lockouts table for account lockout tracking
+            const createAccountLockoutsTable = `
+                CREATE TABLE IF NOT EXISTS account_lockouts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    failed_attempts INTEGER NOT NULL DEFAULT 0,
+                    locked_until DATETIME,
+                    last_attempt DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `;
+
             this.db.run(createUsersTable, (err) => {
                 if (err) {
                     reject(err);
@@ -48,9 +73,23 @@ class DatabaseManager {
                         reject(err);
                         return;
                     }
-                    
-                    console.log('Database tables initialized successfully');
-                    resolve();
+
+                    this.db.run(createLoginAttemptsTable, (err) => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+
+                        this.db.run(createAccountLockoutsTable, (err) => {
+                            if (err) {
+                                reject(err);
+                                return;
+                            }
+                            
+                            console.log('Database tables initialized successfully');
+                            resolve();
+                        });
+                    });
                 });
             });
         });
@@ -191,6 +230,21 @@ class DatabaseManager {
                     reject(err);
                 } else {
                     resolve({ changes: this.changes });
+                }
+            });
+            stmt.finalize();
+        });
+    }
+
+    // Update user role
+    updateUserRole(userId, role) {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+            stmt.run([role, userId], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.changes > 0);
                 }
             });
             stmt.finalize();

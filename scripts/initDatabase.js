@@ -64,6 +64,7 @@ async function initializeDatabase(cleanFirst = false) {
         // Check if users already exist
         const existingAdmin = await db.getUserByUsername('admin');
         const existingViewer = await db.getUserByUsername('viewer');
+        const existingAdminUsers = await db.getUserByUsername('adminusers');
         
         // Create password service instance
         const passwordService = new PasswordService();
@@ -84,6 +85,15 @@ async function initializeDatabase(cleanFirst = false) {
             console.log('✅ Created viewer user (username: viewer, password: viewer123) - Password encrypted');
         } else {
             console.log('ℹ️  Viewer user already exists');
+        }
+        
+        if (!existingAdminUsers) {
+            // Hash the password before storing
+            const hashedAdminUsersPassword = await passwordService.hashPassword('adminusers123');
+            await db.createUser('adminusers', hashedAdminUsersPassword, 'admin_manage_users');
+            console.log('✅ Created admin_manage_users user (username: adminusers, password: adminusers123) - Password encrypted');
+        } else {
+            console.log('ℹ️  Admin users manager already exists');
         }
         
         // Create sample products
@@ -159,12 +169,17 @@ async function initializeDatabase(cleanFirst = false) {
         console.log('   👤 Admin User:');
         console.log('      Username: admin');
         console.log('      Password: admin123');
-        console.log('      Role: admin (can create, read, update, delete)');
+        console.log('      Role: admin (can create, read, update, delete inventory)');
         console.log('');
         console.log('   👤 Viewer User:');
         console.log('      Username: viewer');
         console.log('      Password: viewer123');
-        console.log('      Role: viewer (can only read)');
+        console.log('      Role: viewer (can only read inventory)');
+        console.log('');
+        console.log('   👤 User Management Admin:');
+        console.log('      Username: adminusers');
+        console.log('      Password: adminusers123');
+        console.log('      Role: admin_manage_users (can manage users and roles)');
         console.log('');
         console.log('📦 Sample Products:');
         console.log(`   ${sampleProducts.length} products added to inventory`);

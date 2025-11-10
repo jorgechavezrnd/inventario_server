@@ -1,0 +1,120 @@
+### API Tests - User Management Endpoints
+
+# Base URL
+@baseUrl = http://localhost:3000
+@username = adminusers
+@password = adminusers123
+
+### 1. Login with admin_manage_users
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+### 2. Get Access Token from login response
+@accessToken = {{login.response.body.tokens.accessToken}}
+
+### 3. Get all users (admin_manage_users only)
+GET {{baseUrl}}/auth/manage/users
+Authorization: Bearer {{accessToken}}
+
+### 4. Create new user
+POST {{baseUrl}}/auth/manage/users
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "testpass123",
+  "role": "viewer"
+}
+
+### 5. Create another user (admin role)
+POST {{baseUrl}}/auth/manage/users
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "username": "carlos",
+  "password": "carlos123",
+  "role": "admin"
+}
+
+### 6. Get users again to see new users
+GET {{baseUrl}}/auth/manage/users
+Authorization: Bearer {{accessToken}}
+
+### 7. Update user role (change testuser from viewer to admin)
+PUT {{baseUrl}}/auth/manage/users/4/role
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "role": "admin"
+}
+
+### 8. Update another user role (change carlos from admin to viewer)
+PUT {{baseUrl}}/auth/manage/users/5/role
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "role": "viewer"
+}
+
+### 9. Get users to verify role changes
+GET {{baseUrl}}/auth/manage/users
+Authorization: Bearer {{accessToken}}
+
+### 10. Try to delete a user (testuser with id 4)
+DELETE {{baseUrl}}/auth/manage/users/4
+Authorization: Bearer {{accessToken}}
+
+### 11. Get users to verify deletion
+GET {{baseUrl}}/auth/manage/users
+Authorization: Bearer {{accessToken}}
+
+### 12. Try to delete admin_manage_users (should fail)
+DELETE {{baseUrl}}/auth/manage/users/3
+Authorization: Bearer {{accessToken}}
+
+### 13. Try to change role of admin_manage_users (should fail)
+PUT {{baseUrl}}/auth/manage/users/3/role
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "role": "admin"
+}
+
+### 14. Try with invalid role (should fail)
+POST {{baseUrl}}/auth/manage/users
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "username": "invaliduser",
+  "password": "pass123",
+  "role": "superadmin"
+}
+
+### 15. Try to access with regular admin user (should fail - 403)
+# First login as admin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+### 16. Try to access manage users endpoint with admin token (should fail)
+# Replace with actual admin token from previous request
+GET {{baseUrl}}/auth/manage/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+###

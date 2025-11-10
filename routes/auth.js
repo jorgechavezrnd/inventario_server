@@ -484,4 +484,237 @@ router.get('/security/report', requireAuth, requireRole(['admin']), async (req, 
     }
 });
 
+// ============================================
+// USER MANAGEMENT ENDPOINTS (admin_manage_users role)
+// ============================================
+
+// GET /auth/manage/users - Get all users with their roles (admin_manage_users only)
+router.get('/manage/users', requireAuth, requireRole(['admin_manage_users']), async (req, res) => {
+    try {
+        const usersResult = await authService.getAllUsers();
+
+        if (!usersResult.success) {
+            return res.status(500).json({
+                success: false,
+                message: usersResult.message
+            });
+        }
+
+        // Return users with role information
+        const usersWithRoles = usersResult.users.map(user => ({
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            created_at: user.created_at,
+            updated_at: user.updated_at
+        }));
+
+        res.json({
+            success: true,
+            message: 'Users retrieved successfully',
+            users: usersWithRoles,
+            count: usersWithRoles.length
+        });
+    } catch (error) {
+        console.error('Users retrieval error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve users'
+        });
+    }
+});
+
+// POST /auth/manage/users - Create new user with role (admin_manage_users only)
+router.post('/manage/users', requireAuth, requireRole(['admin_manage_users']), async (req, res) => {
+    try {
+        const { username, password, role } = req.body;
+
+        // Validate required fields
+        if (!username || !password || !role) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username, password, and role are required'
+            });
+        }
+
+        // Validate role (only allow these roles to be assigned)
+        const allowedRoles = ['admin', 'viewer'];
+        if (!allowedRoles.includes(role)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid role. Allowed roles: ${allowedRoles.join(', ')}`
+            });
+        }
+
+        // Check if username already exists
+        const existingUser = await authService.db.getUserByUsername(username);
+        if (existingUser) {
+            return res.status(409).json({
+                success: false,
+                message: 'Username already exists'
+            });
+        }
+
+        // Hash password
+        const hashedPassword = await authService.passwordService.hashPassword(password);
+
+        // Create user
+        const newUser = await authService.db.createUser(username, hashedPassword, role);
+
+        res.status(201).json({
+            success: true,
+            message: 'User created successfully',
+            user: {
+                id: newUser.id,
+                username: newUser.username,
+                role: newUser.role
+            }
+        });
+    } catch (error) {
+        console.error('User creation error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create user'
+        });
+    }
+});
+
+// PUT /auth/manage/users/:userId/role - Update user role (admin_manage_users only)
+router.put('/manage/users/:userId/role', requireAuth, requireRole(['admin_manage_users']), async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { role } = req.body;
+
+        // Validate role
+        if (!role) {
+            return res.status(400).json({
+                success: false,
+                message: 'Role is required'
+            });
+        }
+
+        // Validate role (only allow these roles to be assigned)
+        const allowedRoles = ['admin', 'viewer'];
+        if (!allowedRoles.includes(role)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid role. Allowed roles: ${allowedRoles.join(', ')}`
+            });
+        }
+
+        // Get user to verify it exists
+        const user = await authService.db.getUserById(parseInt(userId));
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Prevent changing role of admin_manage_users
+        if (user.role === 'admin_manage_users') {
+            return res.status(403).json({
+                success: false,
+                message: 'Cannot change role of admin_manage_users user'
+            });
+        }
+
+        // Update user role
+        const updated = await authService.db.updateUserRole(parseInt(userId), role);
+        
+        if (!updated) {
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to update user role'
+            });
+        }
+
+        // Get updated user
+        const updatedUser = await authService.db.getUserById(parseInt(userId));
+
+        res.json({
+            success: true,
+            message: 'User role updated successfully',
+            user: {
+                id: updatedUser.id,
+                username: updatedUser.username,
+                role: updatedUser.role,
+                updated_at: updatedUser.updated_at
+            }
+        });
+    } catch (error) {
+        console.error('User role update error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update user role'
+        });
+    }
+});
+
+// DELETE /auth/manage/users/:userId - Delete user (admin_manage_users only)
+router.delete('/manage/users/:userId', requireAuth, requireRole(['admin_manage_users']), async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Get user to verify it exists
+        const user = await authService.db.getUserById(parseInt(userId));
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Prevent deletion of admin_manage_users
+        if (user.role === 'admin_manage_users') {
+            return res.status(403).json({
+                success: false,
+                message: 'Cannot delete admin_manage_users user'
+            });
+        }
+
+        // Prevent self-deletion
+        if (parseInt(userId) === req.user.id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot delete your own account'
+            });
+        }
+
+        // Delete user (implementation depends on your DatabaseManager)
+        // For now, we'll use a simple approach
+        const deleted = await new Promise((resolve, reject) => {
+            authService.db.db.run('DELETE FROM users WHERE id = ?', [parseInt(userId)], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.changes > 0);
+                }
+            });
+        });
+
+        if (!deleted) {
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to delete user'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'User deleted successfully',
+            deletedUser: {
+                id: user.id,
+                username: user.username
+            }
+        });
+    } catch (error) {
+        console.error('User deletion error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete user'
+        });
+    }
+});
+
 module.exports = router;
