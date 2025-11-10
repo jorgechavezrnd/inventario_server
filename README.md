@@ -8,8 +8,10 @@ Un servidor Express.js completo para gestión de inventario con autenticación J
 - **Autenticación Híbrida**: JWT + Sesiones para máxima compatibilidad
 - **JWT Tokens**: Access tokens (15 min) y refresh tokens (7 días)
 - **Encriptación**: Contraseñas protegidas con bcrypt (12 salt rounds)
-- **RBAC**: Control de acceso granular por roles (admin/viewer)
+- **RBAC**: Control de acceso granular por roles (admin/viewer/admin_manage_users)
 - **Validación**: Contraseñas seguras y validación de entrada robusta
+- **Rate Limiting**: Protección contra ataques de fuerza bruta (5 intentos/15 min)
+- **Account Lockout**: Bloqueo automático de cuentas tras intentos fallidos
 
 ### 🏗️ Arquitectura Técnica
 - **Framework**: Express.js 4.18.2 con Node.js
@@ -35,12 +37,14 @@ inventario_server/
 │
 ├── database/
 │   ├── DatabaseManager.js         # Gestión SQLite con async/await
-│   └── inventario.db              # Base de datos SQLite (auto-generada)
+│   └── database.sqlite            # Base de datos SQLite (auto-generada)
 │
 ├── services/
 │   ├── AuthService.js             # Lógica de autenticación
 │   ├── JWTService.js              # Gestión completa de tokens JWT
-│   └── PasswordService.js         # Encriptación y validación de contraseñas
+│   ├── PasswordService.js         # Encriptación y validación de contraseñas
+│   ├── RateLimitService.js        # Control de rate limiting y bloqueos
+│   └── SecurityMaintenanceService.js  # Limpieza automática de logs
 │
 ├── middleware/
 │   └── auth.js                    # Middleware de autenticación híbrida
@@ -77,9 +81,18 @@ npm install
 # Crear base de datos con datos de ejemplo
 npm run init-db
 
+# Recrear base de datos desde cero (limpia datos existentes)
+npm run init-db -- --clean
+
 # (Opcional) Migrar contraseñas existentes a formato encriptado
 npm run migrate-passwords
 ```
+
+**Tablas creadas:**
+- `users` - Usuarios del sistema con roles
+- `products` - Inventario de productos
+- `login_attempts` - Registro de intentos de login para rate limiting
+- `account_lockouts` - Control de bloqueos de cuenta por intentos fallidos
 
 ### ▶️ Iniciar el Servidor
 ```bash
@@ -109,6 +122,15 @@ curl http://localhost:3000/health
 | `POST` | `/auth/refresh` | Renovar access token | Todos | Refresh Token |
 | `PUT` | `/auth/change-password` | Cambiar contraseña | Todos | Sí |
 | `GET` | `/auth/token-info` | Información del token JWT | Todos | Sí |
+
+### 👥 Gestión de Usuarios (Admin Manage Users)
+
+| Método | Endpoint | Descripción | Roles | Auth |
+|--------|----------|-------------|--------|------|
+| `GET` | `/auth/manage/users` | Listar todos los usuarios | Admin Manage Users | Sí |
+| `POST` | `/auth/manage/users` | Crear nuevo usuario | Admin Manage Users | Sí |
+| `PUT` | `/auth/manage/users/:id/role` | Actualizar rol de usuario | Admin Manage Users | Sí |
+| `DELETE` | `/auth/manage/users/:id` | Eliminar usuario | Admin Manage Users | Sí |
 
 ### 📦 Gestión de Productos
 
@@ -141,12 +163,20 @@ curl http://localhost:3000/health
 - **Usuarios**: No puede registrar usuarios
 - **Perfil**: Puede ver y cambiar su propia contraseña
 
+### 👥 Administrador de Usuarios (admin_manage_users)
+- **Usuarios**: Gestión completa de usuarios y roles (CRUD)
+- **Permisos**: Crear usuarios con roles admin/viewer, actualizar roles, eliminar usuarios
+- **Limitaciones**: No puede acceder a productos/inventario
+- **Protección**: Rol único e inmutable, no puede ser modificado ni eliminado
+- **Separación**: Responsabilidades separadas de gestión de inventario
+
 ## 🆔 Usuarios Predeterminados
 
 | Usuario | Contraseña | Rol | Descripción |
 |---------|------------|-----|-------------|
-| `admin` | `admin123` | Administrador | Acceso completo al sistema |
+| `admin` | `admin123` | Administrador | Acceso completo al sistema de inventario |
 | `viewer` | `viewer123` | Visualizador | Solo lectura de productos |
+| `adminusers` | `adminusers123` | Admin Manage Users | Gestión exclusiva de usuarios y roles |
 
 ## 🔐 Autenticación JWT
 
@@ -289,7 +319,24 @@ El archivo `api-tests.http` contiene más de 50 tests organizados en categorías
 
 ## 🔒 Configuración de Seguridad
 
-### 🔑 Configuración JWT
+### �️ Sistema de Protección Contra Ataques
+
+**Rate Limiting por Usuario:**
+- Máximo 5 intentos fallidos de login por usuario en 15 minutos
+- Bloqueo automático de cuenta por 15 minutos tras exceder el límite
+- Tabla `account_lockouts` para tracking de bloqueos
+
+**Rate Limiting por IP:**
+- Máximo 10 intentos fallidos de login por IP en 15 minutos
+- Protección contra ataques distribuidos
+- Tabla `login_attempts` para auditoría completa
+
+**Limpieza Automática:**
+- Job programado cada hora para limpieza de logs antiguos
+- Retención de intentos de login: 30 días
+- Liberación automática de bloqueos expirados
+
+### �🔑 Configuración JWT
 ```javascript
 // Configuración actual (ajustar para producción)
 const JWT_CONFIG = {
@@ -298,19 +345,6 @@ const JWT_CONFIG = {
   saltRounds: 12,             // bcrypt salt rounds
   secretKey: 'your-secret-key' // CAMBIAR en producción
 };
-```
-
-### 🏭 Recomendaciones de Producción
-```bash
-# 1. Variables de entorno
-export JWT_SECRET="tu-secreto-super-seguro-aleatorio-256-bits"
-export JWT_REFRESH_SECRET="otro-secreto-diferente-para-refresh"
-export NODE_ENV="production"
-
-# 2. HTTPS obligatorio
-# 3. Rate limiting
-# 4. Helmet.js para headers de seguridad
-# 5. Validación de entrada más estricta
 ```
 
 ## 📊 Códigos de Estado HTTP
@@ -355,42 +389,6 @@ npm run init-db
 # 4. Iniciar servidor
 npm start
 ```
-
-### ✅ Checklist de Seguridad
-- [ ] Cambiar secretos JWT por valores aleatorios seguros
-- [ ] Habilitar HTTPS/TLS
-- [ ] Implementar rate limiting
-- [ ] Agregar headers de seguridad (Helmet.js)
-- [ ] Configurar CORS apropiadamente
-- [ ] Implementar logging y monitoreo
-- [ ] Backup automático de base de datos
-- [ ] Validar todas las entradas de usuario
-- [ ] Implementar rotación de secretos
-
-## 🔮 Características Futuras
-
-- [ ] API para aplicaciones móviles
-- [ ] Búsqueda avanzada de productos
-- [ ] Dashboard de analytics
-- [ ] Notificaciones en tiempo real
-- [ ] Export/Import de datos
-- [ ] Internacionalización (i18n)
-- [ ] Panel de administración web
-
-## 🔧 Solución de Problemas
-
-Si encuentras algún problema:
-1. Verificar que todas las dependencias estén instaladas
-2. Comprobar que el servidor esté corriendo en puerto 3000
-3. Revisar logs del servidor para errores
-4. Verificar que la base de datos esté inicializada
-
-## 📚 Recursos Adicionales
-
-- [Express.js Documentation](https://expressjs.com/)
-- [JWT.io - JWT Debugger](https://jwt.io/)
-- [bcrypt.js Documentation](https://github.com/dcodeIO/bcrypt.js)
-- [SQLite Documentation](https://sqlite.org/docs.html)
 
 ---
 
