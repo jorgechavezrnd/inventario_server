@@ -428,10 +428,10 @@ router.get('/security/locked-accounts', requireAuth, requireRole(['admin']), asy
         const rateLimitService = rateLimitMiddleware.rateLimitService;
         const lockedAccounts = await new Promise((resolve, reject) => {
             const query = `
-                SELECT username, locked_at, locked_until, failed_attempts, locked_by
+                SELECT username, last_attempt, locked_until, failed_attempts
                 FROM account_lockouts 
                 WHERE locked_until > datetime('now')
-                ORDER BY locked_at DESC
+                ORDER BY last_attempt DESC
             `;
             
             rateLimitService.db.db.all(query, [], (err, rows) => {
@@ -445,10 +445,9 @@ router.get('/security/locked-accounts', requireAuth, requireRole(['admin']), asy
             message: 'Locked accounts retrieved successfully',
             lockedAccounts: lockedAccounts.map(account => ({
                 username: account.username,
-                lockedAt: account.locked_at,
+                lastAttempt: account.last_attempt,
                 lockedUntil: account.locked_until,
-                failedAttempts: account.failed_attempts,
-                lockedBy: account.locked_by
+                failedAttempts: account.failed_attempts
             })),
             totalLocked: lockedAccounts.length
         });

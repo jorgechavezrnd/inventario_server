@@ -149,8 +149,8 @@ class RateLimitService {
                         
                         this.db.db.run(`
                             INSERT OR REPLACE INTO account_lockouts 
-                            (username, locked_until, failed_attempts, locked_by)
-                            VALUES (?, ?, ?, 'auto')
+                            (username, locked_until, failed_attempts, last_attempt)
+                            VALUES (?, ?, ?, datetime('now'))
                         `, [username, lockedUntil.toISOString(), failedAttempts], (lockErr) => {
                             if (lockErr) {
                                 console.error('Error locking account:', lockErr);
